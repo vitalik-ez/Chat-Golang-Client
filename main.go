@@ -9,8 +9,7 @@ import (
 
 func Menu() {
 	user := auth.Menu()
-	roomId := room.RoomMenu(user)
-	fmt.Println("Room Id", roomId)
+	room.RoomMenu(user)
 
 }
 

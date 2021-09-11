@@ -1,6 +1,7 @@
 package room
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -21,17 +23,51 @@ const (
 	logInRoom         = "ws://localhost:8000/api/room/ws/"
 )
 
-func RoomMenu(user *auth.User) uint {
-	roomId := createRoom(user.Token)
-	roomAddress := fmt.Sprintf("%s%d", logInRoom, roomId)
-	connectToRoom(user, roomAddress)
-	return roomId
+func RoomMenu(user *auth.User) {
+
+	for {
+		fmt.Println("Room Menu")
+		fmt.Println("1. Create room")
+		fmt.Println("2. Enter in exist room")
+		fmt.Println("3. Exit")
+		fmt.Print("Enter a number of point: ")
+		var pointOfMenu uint8
+		for {
+			_, err := fmt.Scanf("%d", &pointOfMenu)
+			if err != nil {
+				fmt.Println("Invalid pointOfMenu:", err)
+				continue
+			}
+			break
+		}
+
+		switch pointOfMenu {
+		case 1:
+			fmt.Println("Create Room:")
+			roomId := createRoom(user.Token)
+			fmt.Println("The id of created room: ", roomId)
+			//connectToRoom(user)
+			//return roomId
+		case 2:
+			fmt.Println("Enter in exist room")
+			connectToRoom(user)
+		default:
+			fmt.Println("Exit")
+			return
+		}
+	}
+	/*
+		roomAddress := fmt.Sprintf("%s%d", logInRoom, roomId)
+		connectToRoom(user, roomAddress)
+		return roomId
+	*/
 }
 
 type Message struct {
-	Data     string    `json:"data"`
-	CreateAt time.Time `json:"time"`
-	Author   string    `json:"author"`
+	Room     string    `json:"room" binding:"required"`
+	Author   string    `json:"author" binding:"required"`
+	Text     string    `json:"text"   binding:"required"`
+	CreateAt time.Time `json:"time"   binding:"required"`
 }
 
 func readInput(inputMessage chan<- string) {
@@ -46,17 +82,55 @@ func readInput(inputMessage chan<- string) {
 
 }
 
-func connectToRoom(user *auth.User, roomAddress string) {
+type ServerCommand struct {
+	Command string `json:"command"`
+	Data    string `json:"data"`
+	Author  string `json:"author"`
+}
+
+type ListRoom struct {
+	List string `json:"list" binding:"required"`
+}
+
+func connectToRoom(user *auth.User) {
 	fmt.Println(user.Name, " connect to the room")
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
 
 	var bearer = "Bearer " + user.Token
-	c, _, err := websocket.DefaultDialer.Dial(roomAddress, http.Header{"Authorization": []string{bearer}})
+	c, _, err := websocket.DefaultDialer.Dial(logInRoom, http.Header{"Authorization": []string{bearer}})
 	if err != nil {
-		log.Fatal("dial:", err)
+		log.Fatal(err)
 	}
 	defer c.Close()
+
+	var listOfRooms []string
+	err = c.ReadJSON(&listOfRooms)
+	if err != nil {
+		log.Println("error while receive list of rooms", err)
+		return
+	}
+	var pointOfMenu uint
+	if len(listOfRooms) == 0 {
+		fmt.Println("Rooms aren't existed")
+		time.Sleep(2 * time.Second)
+		return
+	} else {
+		for index, value := range listOfRooms {
+			fmt.Println(index, value)
+		}
+		fmt.Print("Enter number of room: ")
+		_, err = fmt.Scanf("%d", &pointOfMenu)
+		if err != nil {
+			fmt.Println("Invalid pointOfMenu:", err)
+			return
+		}
+		c.WriteJSON(&ServerCommand{
+			Command: "join",
+			Data:    listOfRooms[pointOfMenu],
+			Author:  user.Name,
+		})
+	}
 
 	done := make(chan struct{})
 
@@ -70,7 +144,7 @@ func connectToRoom(user *auth.User, roomAddress string) {
 				return
 			}
 			//log.Println("recv:", message.CreateAt, message.Author, message.Data)
-			fmt.Println("recv:", message.CreateAt.Format("01-02-2006 15:04:05 Monday"), message.Author, message.Data)
+			fmt.Println("recv:", message.CreateAt.Format("01-02-2006 15:04:05 Monday"), message.Author, message.Text)
 		}
 	}()
 
@@ -82,7 +156,8 @@ func connectToRoom(user *auth.User, roomAddress string) {
 		case <-done:
 			return
 		case message := <-inputMessage:
-			msg := Message{Data: message, CreateAt: time.Now(), Author: user.Name}
+			msg := Message{Text: message, CreateAt: time.Now(), Author: user.Name, Room: listOfRooms[pointOfMenu]}
+			fmt.Println("send message", msg)
 			err := c.WriteJSON(msg)
 			if err != nil {
 				log.Println("write:", err)
@@ -116,8 +191,18 @@ type ResponseIdRoom struct {
 }
 
 func inputData() *InputRoomData {
-	return &InputRoomData{
-		Name: "KPI114654",
+	fmt.Print("Enter name room: ")
+	reader := bufio.NewReader(os.Stdin)
+	for {
+		text, _ := reader.ReadString('\n')
+		text = strings.Replace(text, "\n", "", -1)
+		//validate
+		if len(text) == 0 {
+			continue
+		}
+		return &InputRoomData{
+			Name: text,
+		}
 	}
 }
 
@@ -152,8 +237,8 @@ func createRoom(userToken string) uint {
 
 	room := ResponseIdRoom{}
 
-	if resp.StatusCode == 200 {
-		fmt.Println("You successfully create or log in room")
+	if resp.StatusCode == http.StatusOK {
+		fmt.Println("You successfully create room")
 		err := json.Unmarshal(body, &room)
 		if err != nil {
 			log.Fatal(err.Error())
