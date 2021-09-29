@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -44,8 +43,10 @@ func RoomMenu(user *auth.User) {
 		switch pointOfMenu {
 		case 1:
 			fmt.Println("Create Room:")
-			roomId := createRoom(user.Token)
-			fmt.Println("The id of created room: ", roomId)
+			room := createRoom(user.Token)
+			if room != nil {
+				fmt.Println("The id of created room: ", room.Id)
+			}
 			//connectToRoom(user)
 			//return roomId
 		case 2:
@@ -56,11 +57,6 @@ func RoomMenu(user *auth.User) {
 			return
 		}
 	}
-	/*
-		roomAddress := fmt.Sprintf("%s%d", logInRoom, roomId)
-		connectToRoom(user, roomAddress)
-		return roomId
-	*/
 }
 
 type Message struct {
@@ -93,10 +89,8 @@ type ListRoom struct {
 }
 
 func connectToRoom(user *auth.User) {
-	fmt.Println(user.Name, " connect to the room")
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
-
 	var bearer = "Bearer " + user.Token
 	c, _, err := websocket.DefaultDialer.Dial(logInRoom, http.Header{"Authorization": []string{bearer}})
 	if err != nil {
@@ -117,7 +111,7 @@ func connectToRoom(user *auth.User) {
 		return
 	} else {
 		for index, value := range listOfRooms {
-			fmt.Println(index, value)
+			fmt.Println(index+1, value)
 		}
 		fmt.Print("Enter number of room: ")
 		_, err = fmt.Scanf("%d", &pointOfMenu)
@@ -127,7 +121,7 @@ func connectToRoom(user *auth.User) {
 		}
 		c.WriteJSON(&ServerCommand{
 			Command: "join",
-			Data:    listOfRooms[pointOfMenu],
+			Data:    listOfRooms[pointOfMenu-1],
 			Author:  user.Name,
 		})
 	}
@@ -163,21 +157,22 @@ func connectToRoom(user *auth.User) {
 				log.Println("write:", err)
 				return
 			}
-		case <-interrupt:
-			log.Println("interrupt")
+			/*
+				case <-interrupt:
+					log.Println("interrupt")
 
-			// Cleanly close the connection by sending a close message and then
-			// waiting (with timeout) for the server to close the connection.
-			err := c.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
-			if err != nil {
-				log.Println("write close:", err)
-				return
-			}
-			select {
-			case <-done:
-			case <-time.After(time.Second):
-			}
-			return
+					// Cleanly close the connection by sending a close message and then
+					// waiting (with timeout) for the server to close the connection.
+					err := c.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+					if err != nil {
+						log.Println("write close:", err)
+						return
+					}
+					select {
+					case <-done:
+					case <-time.After(time.Second):
+					}
+					return*/
 		}
 	}
 }
@@ -187,7 +182,7 @@ type InputRoomData struct {
 }
 
 type ResponseIdRoom struct {
-	Id uint `json:"id"`
+	Id int `json:"id"`
 }
 
 func inputData() *InputRoomData {
@@ -196,7 +191,6 @@ func inputData() *InputRoomData {
 	for {
 		text, _ := reader.ReadString('\n')
 		text = strings.Replace(text, "\n", "", -1)
-		//validate
 		if len(text) == 0 {
 			continue
 		}
@@ -206,26 +200,18 @@ func inputData() *InputRoomData {
 	}
 }
 
-func createRoom(userToken string) uint {
+func createRoom(userToken string) *ResponseIdRoom {
 	input := inputData()
 	requestBody, err := json.Marshal(input)
-
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	var bearer = "Bearer " + userToken
-
-	// Create a new request using http
 	req, err := http.NewRequest(http.MethodPost, createRoomAddress, bytes.NewBuffer(requestBody))
-
 	if err != nil {
 		log.Fatal(err)
 	}
-	// add authorization header to the req
 	req.Header.Add("Authorization", bearer)
-
-	// Send req using http Client
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -233,25 +219,23 @@ func createRoom(userToken string) uint {
 	}
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, readErr := ioutil.ReadAll(resp.Body)
+	if readErr != nil {
+		log.Fatal(readErr)
+	}
 
 	room := ResponseIdRoom{}
-
 	if resp.StatusCode == http.StatusOK {
-		fmt.Println("You successfully create room")
 		err := json.Unmarshal(body, &room)
 		if err != nil {
 			log.Fatal(err.Error())
 		}
+		fmt.Println("You successfully create room")
 	} else {
-		log.Fatal("Error Room id !!!")
-		io.Copy(os.Stdout, resp.Body)
+		fmt.Println("Room wasn't created. Try aganin!")
+		return nil
 	}
-	if err != nil {
-		log.Println("Error while reading the response bytes:", err)
-	}
-	log.Println(string([]byte(body)))
 
-	return room.Id
+	return &room
 
 }
