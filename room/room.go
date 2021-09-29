@@ -2,24 +2,24 @@ package room
 
 import (
 	"bufio"
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"strings"
-	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/vitalik-ez/Chat-Golang-Client/api"
 	"github.com/vitalik-ez/Chat-Golang-Client/auth"
+	"github.com/vitalik-ez/Chat-Golang-Client/entity"
 )
 
 const (
-	createRoomAddress = "http://localhost:8000/api/room"
-	logInRoom         = "ws://localhost:8000/api/room/ws/"
+	createRoomAddress     = "http://localhost:8000/api/room"
+	logInRoomAddress      = "ws://localhost:8000/api/room/ws/"
+	getListOfRoomsAddress = "ws://localhost:8000/api/room/ws/"
 )
 
 func RoomMenu(user *auth.User) {
@@ -51,6 +51,7 @@ func RoomMenu(user *auth.User) {
 			//return roomId
 		case 2:
 			fmt.Println("Enter in exist room")
+			getListOfRooms(user.Token)
 			connectToRoom(user)
 		default:
 			fmt.Println("Exit")
@@ -59,11 +60,8 @@ func RoomMenu(user *auth.User) {
 	}
 }
 
-type Message struct {
-	Room     string    `json:"room" binding:"required"`
-	Author   string    `json:"author" binding:"required"`
-	Text     string    `json:"text"   binding:"required"`
-	CreateAt time.Time `json:"time"   binding:"required"`
+func getListOfRooms(token string) {
+	api.Request(http.MethodGet)
 }
 
 func readInput(inputMessage chan<- string) {
@@ -92,52 +90,51 @@ func connectToRoom(user *auth.User) {
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
 	var bearer = "Bearer " + user.Token
-	c, _, err := websocket.DefaultDialer.Dial(logInRoom, http.Header{"Authorization": []string{bearer}})
+	c, _, err := websocket.DefaultDialer.Dial(logInRoomAddress, http.Header{"Authorization": []string{bearer}})
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer c.Close()
-
-	var listOfRooms []string
-	err = c.ReadJSON(&listOfRooms)
-	if err != nil {
-		log.Println("error while receive list of rooms", err)
-		return
-	}
-	var pointOfMenu uint
-	if len(listOfRooms) == 0 {
-		fmt.Println("Rooms aren't existed")
-		time.Sleep(2 * time.Second)
-		return
-	} else {
-		for index, value := range listOfRooms {
-			fmt.Println(index+1, value)
-		}
-		fmt.Print("Enter number of room: ")
-		_, err = fmt.Scanf("%d", &pointOfMenu)
+	/*
+		var listOfRooms []string
+		err = c.ReadJSON(&listOfRooms)
 		if err != nil {
-			fmt.Println("Invalid pointOfMenu:", err)
+			log.Println("error while receive list of rooms", err)
 			return
 		}
-		c.WriteJSON(&ServerCommand{
-			Command: "join",
-			Data:    listOfRooms[pointOfMenu-1],
-			Author:  user.Name,
-		})
-	}
+		var pointOfMenu uint
+		if len(listOfRooms) == 0 {
+			fmt.Println("Rooms aren't existed")
+			time.Sleep(2 * time.Second)
+			return
+		} else {
+			for index, value := range listOfRooms {
+				fmt.Println(index+1, value)
+			}
+			fmt.Print("Enter number of room: ")
+			_, err = fmt.Scanf("%d", &pointOfMenu)
+			if err != nil {
+				fmt.Println("Invalid pointOfMenu:", err)
+				return
+			}
+			c.WriteJSON(&ServerCommand{
+				Command: "join",
+				Data:    listOfRooms[pointOfMenu-1],
+				Author:  user.Name,
+			})
+		}*/
 
 	done := make(chan struct{})
 
 	go func() {
 		defer close(done)
 		for {
-			message := Message{}
+			message := entity.NewEmptyMessage()
 			err := c.ReadJSON(&message)
 			if err != nil {
 				log.Println("read:", err)
 				return
 			}
-			//log.Println("recv:", message.CreateAt, message.Author, message.Data)
 			fmt.Println("recv:", message.CreateAt.Format("01-02-2006 15:04:05 Monday"), message.Author, message.Text)
 		}
 	}()
@@ -150,8 +147,7 @@ func connectToRoom(user *auth.User) {
 		case <-done:
 			return
 		case message := <-inputMessage:
-			msg := Message{Text: message, CreateAt: time.Now(), Author: user.Name, Room: listOfRooms[pointOfMenu]}
-			fmt.Println("send message", msg)
+			msg := entity.NewMessage(listOfRooms[pointOfMenu], user.Name, message)
 			err := c.WriteJSON(msg)
 			if err != nil {
 				log.Println("write:", err)
@@ -172,7 +168,8 @@ func connectToRoom(user *auth.User) {
 					case <-done:
 					case <-time.After(time.Second):
 					}
-					return*/
+					return
+			*/
 		}
 	}
 }
@@ -207,25 +204,9 @@ func createRoom(userToken string) *ResponseIdRoom {
 		log.Fatal(err)
 	}
 	var bearer = "Bearer " + userToken
-	req, err := http.NewRequest(http.MethodPost, createRoomAddress, bytes.NewBuffer(requestBody))
-	if err != nil {
-		log.Fatal(err)
-	}
-	req.Header.Add("Authorization", bearer)
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Println("Error on response.\n[ERROR] -", err)
-	}
-	defer resp.Body.Close()
-
-	body, readErr := ioutil.ReadAll(resp.Body)
-	if readErr != nil {
-		log.Fatal(readErr)
-	}
-
+	body := api.PostRequest(createRoomAddress, requestBody, bearer)
 	room := ResponseIdRoom{}
-	if resp.StatusCode == http.StatusOK {
+	if body != nil {
 		err := json.Unmarshal(body, &room)
 		if err != nil {
 			log.Fatal(err.Error())
@@ -235,7 +216,6 @@ func createRoom(userToken string) *ResponseIdRoom {
 		fmt.Println("Room wasn't created. Try aganin!")
 		return nil
 	}
-
 	return &room
 
 }

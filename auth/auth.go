@@ -2,15 +2,13 @@ package auth
 
 import (
 	"bufio"
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
-	"net/http"
 	"os"
 	"strings"
-	"time"
+
+	"github.com/vitalik-ez/Chat-Golang-Client/api"
 )
 
 const (
@@ -44,10 +42,8 @@ func inputData(commands []string) map[string]string {
 	return inputData
 }
 
+/*
 func authRequest(address string, requestBody []byte) []byte {
-	client := &http.Client{
-		Timeout: time.Second * 2,
-	}
 	req, err := http.NewRequest(
 		http.MethodPost, address, bytes.NewBuffer(requestBody),
 	)
@@ -55,6 +51,9 @@ func authRequest(address string, requestBody []byte) []byte {
 		log.Fatal(err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{
+		Timeout: time.Second * 2,
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Fatal(err)
@@ -68,7 +67,7 @@ func authRequest(address string, requestBody []byte) []byte {
 		return nil
 	}
 	return body
-}
+}*/
 
 type ResponseRegister struct {
 	Id uint `json:"id" binding:"required"`
@@ -80,7 +79,7 @@ func signUp() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	body := authRequest(signUpAddress, requestBody)
+	body := api.PostRequest(signUpAddress, requestBody)
 	register := ResponseRegister{}
 	if body != nil {
 		err := json.Unmarshal(body, &register)
@@ -104,7 +103,7 @@ func signIn() *User {
 	if err != nil {
 		log.Fatal(err)
 	}
-	body := authRequest(signInAddress, requestBody)
+	body := api.PostRequest(signInAddress, requestBody)
 	user := User{}
 	if body != nil {
 		err := json.Unmarshal(body, &user)
