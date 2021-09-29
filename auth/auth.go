@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -19,66 +18,56 @@ const (
 	signInAddress = "http://localhost:8000/auth/sign-in"
 )
 
-type InputCredentials struct {
-	Name     string `json:"name"`
-	Email    string `json:"email"`
-	Password string `json:"password"`
+func getCommandsForSignUp() []string {
+	return []string{"name", "email", "password"}
 }
 
-type LogIn struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
+func getCommandsForSignIn() []string {
+	return []string{"email", "password"}
 }
 
-func inputDataForRegistration() *InputCredentials {
-	commands := []string{"Enter a name:", "Enter a email:", "Enter a password:"}
-	var inputData []string
+func inputData(commands []string) map[string]string {
+	inputData := make(map[string]string)
 	reader := bufio.NewReader(os.Stdin)
-	for i := 0; i < len(commands); i++ {
+	for _, command := range commands {
 		for {
-			fmt.Print(commands[i])
+			fmt.Printf("Enter %s:", command)
 			text, _ := reader.ReadString('\n')
 			text = strings.Replace(text, "\n", "", -1)
-			//validate
 			if len(text) == 0 {
 				continue
 			}
-			inputData = append(inputData, text)
+			inputData[command] = text
 			break
-
 		}
 	}
-
-	return &InputCredentials{
-		Name:     inputData[0],
-		Email:    inputData[1],
-		Password: inputData[2],
-	}
+	return inputData
 }
 
-func inputDataForLogIn() *LogIn {
-	commands := []string{"Enter email: ", "Enter a password: "}
-	var inputData []string
-	reader := bufio.NewReader(os.Stdin)
-	for i := 0; i < len(commands); i++ {
-		for {
-			fmt.Print(commands[i])
-			text, _ := reader.ReadString('\n')
-			text = strings.Replace(text, "\n", "", -1)
-			//validate
-			if len(text) == 0 {
-				continue
-			}
-			inputData = append(inputData, text)
-			break
-
-		}
+func authRequest(address string, requestBody []byte) []byte {
+	client := &http.Client{
+		Timeout: time.Second * 2,
 	}
-	return &LogIn{
-		Email:    inputData[0], //  "vetalyeshor@gmail.com",
-		Password: inputData[1], // "qwerty"
+	req, err := http.NewRequest(
+		http.MethodPost, address, bytes.NewBuffer(requestBody),
+	)
+	if err != nil {
+		log.Fatal(err)
 	}
-
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, readErr := ioutil.ReadAll(resp.Body)
+	if readErr != nil {
+		log.Fatal(readErr)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil
+	}
+	return body
 }
 
 type ResponseRegister struct {
@@ -86,51 +75,22 @@ type ResponseRegister struct {
 }
 
 func signUp() {
-	input := inputDataForRegistration()
+	input := inputData(getCommandsForSignUp())
 	requestBody, err := json.Marshal(input)
-
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	client := &http.Client{
-		Timeout: time.Second * 2,
-	}
-
-	req, err := http.NewRequest(
-		http.MethodPost, signUpAddress, bytes.NewBuffer(requestBody),
-	)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Fatal(err)
-		return
-	}
-	defer resp.Body.Close()
-
-	body, readErr := ioutil.ReadAll(resp.Body)
-	if readErr != nil {
-		log.Fatal(readErr)
-	}
-
+	body := authRequest(signUpAddress, requestBody)
 	register := ResponseRegister{}
-	if resp.StatusCode == 200 {
-		fmt.Println("You successfully register")
+	if body != nil {
 		err := json.Unmarshal(body, &register)
 		if err != nil {
 			log.Fatal(err.Error())
 		}
-		fmt.Println("New user id:", register.Id)
+		fmt.Println("You successfully register")
 	} else {
-		io.Copy(os.Stdout, resp.Body)
+		fmt.Println("Server error. Try again!")
 	}
-
 }
 
 type User struct {
@@ -139,52 +99,23 @@ type User struct {
 }
 
 func signIn() *User {
-	input := inputDataForLogIn()
-
+	input := inputData(getCommandsForSignIn())
 	requestBody, err := json.Marshal(input)
-
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	client := &http.Client{
-		Timeout: time.Second * 2,
-	}
-
-	req, err := http.NewRequest(
-		http.MethodPost, signInAddress, bytes.NewBuffer(requestBody),
-	)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	defer resp.Body.Close()
-
-	body, readErr := ioutil.ReadAll(resp.Body)
-	if readErr != nil {
-		log.Fatal(readErr)
-	}
-
+	body := authRequest(signInAddress, requestBody)
 	user := User{}
-	if resp.StatusCode == 200 {
-		fmt.Println("You successfully log in")
+	if body != nil {
 		err := json.Unmarshal(body, &user)
 		if err != nil {
 			log.Fatal(err.Error())
 		}
+		fmt.Println("You successfully log in")
 	} else {
-		log.Fatal("Error log in !!!")
-		io.Copy(os.Stdout, resp.Body)
+		fmt.Println("Server error. Try again!")
+		return nil
 	}
-
 	return &user
 }
 
@@ -210,7 +141,9 @@ func Menu() *User {
 		switch pointOfMenu {
 		case 1:
 			fmt.Println("Authorization")
-			return signIn()
+			if user := signIn(); user != nil {
+				return user
+			}
 		case 2:
 			fmt.Println("Register")
 			signUp()
