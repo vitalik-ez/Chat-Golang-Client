@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/vitalik-ez/Chat-Golang-Client/api"
@@ -18,8 +19,11 @@ import (
 
 const (
 	createRoomAddress     = "http://localhost:8000/api/room"
+	getListOfRoomsAddress = "http://localhost:8000/api/room"
 	logInRoomAddress      = "ws://localhost:8000/api/room/ws/"
-	getListOfRoomsAddress = "ws://localhost:8000/api/room/ws/"
+	join                  = "join"
+	leave                 = "leave"
+	broadcast             = "broadcast"
 )
 
 func RoomMenu(user *auth.User) {
@@ -51,8 +55,9 @@ func RoomMenu(user *auth.User) {
 			//return roomId
 		case 2:
 			fmt.Println("Enter in exist room")
-			getListOfRooms(user.Token)
-			connectToRoom(user)
+			if room := getListOfRooms(user.Token); room != "" {
+				connectToRoom(user, room)
+			}
 		default:
 			fmt.Println("Exit")
 			return
@@ -60,8 +65,40 @@ func RoomMenu(user *auth.User) {
 	}
 }
 
-func getListOfRooms(token string) {
-	api.Request(http.MethodGet)
+type listOfRoom struct {
+	List []string `json:"list" binding:"required"`
+}
+
+func getListOfRooms(token string) string {
+	body := api.GetRequest(getListOfRoomsAddress, "Bearer "+token)
+	rooms := listOfRoom{}
+	if body != nil {
+		err := json.Unmarshal(body, &rooms)
+		fmt.Println("Rooms", rooms)
+		if err != nil {
+			log.Fatal(err.Error())
+		}
+		if len(rooms.List) > 0 {
+			for index, room := range rooms.List {
+				fmt.Printf("%d. %s \n", index+1, room)
+			}
+			//
+			var numberOfRoom uint
+			fmt.Print("Enter number of room: ")
+			_, err = fmt.Scanf("%d", &numberOfRoom)
+			if err != nil {
+				fmt.Println("Invalid number of room:", err)
+				// handle error
+			}
+			return rooms.List[numberOfRoom-1]
+		} else {
+			fmt.Println("Rooms aren't existed")
+			time.Sleep(2 * time.Second)
+		}
+	} else {
+		fmt.Println("Server error. Try aganin!")
+	}
+	return ""
 }
 
 func readInput(inputMessage chan<- string) {
@@ -86,7 +123,20 @@ type ListRoom struct {
 	List string `json:"list" binding:"required"`
 }
 
-func connectToRoom(user *auth.User) {
+func readMessage(c *websocket.Conn, done chan struct{}) {
+	defer close(done)
+	for {
+		message := entity.NewEmptyMessage()
+		err := c.ReadJSON(&message)
+		if err != nil {
+			log.Println("read:", err)
+			return
+		}
+		fmt.Println("recv:", message.CreateAt.Format("01-02-2006 15:04:05 Monday"), message.Author, message.Text)
+	}
+}
+
+func connectToRoom(user *auth.User, room string) {
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
 	var bearer = "Bearer " + user.Token
@@ -95,38 +145,20 @@ func connectToRoom(user *auth.User) {
 		log.Fatal(err)
 	}
 	defer c.Close()
-	/*
-		var listOfRooms []string
-		err = c.ReadJSON(&listOfRooms)
-		if err != nil {
-			log.Println("error while receive list of rooms", err)
-			return
-		}
-		var pointOfMenu uint
-		if len(listOfRooms) == 0 {
-			fmt.Println("Rooms aren't existed")
-			time.Sleep(2 * time.Second)
-			return
-		} else {
-			for index, value := range listOfRooms {
-				fmt.Println(index+1, value)
-			}
-			fmt.Print("Enter number of room: ")
-			_, err = fmt.Scanf("%d", &pointOfMenu)
-			if err != nil {
-				fmt.Println("Invalid pointOfMenu:", err)
-				return
-			}
-			c.WriteJSON(&ServerCommand{
-				Command: "join",
-				Data:    listOfRooms[pointOfMenu-1],
-				Author:  user.Name,
-			})
-		}*/
+
+	err = c.WriteJSON(&ServerCommand{
+		Command: join,
+		Data:    room,
+		Author:  user.Name,
+	})
+	if err != nil {
+		log.Println("Error with command to join to the room.", err)
+		return
+	}
 
 	done := make(chan struct{})
-
-	go func() {
+	go readMessage(c, done)
+	/*go func() {
 		defer close(done)
 		for {
 			message := entity.NewEmptyMessage()
@@ -137,7 +169,7 @@ func connectToRoom(user *auth.User) {
 			}
 			fmt.Println("recv:", message.CreateAt.Format("01-02-2006 15:04:05 Monday"), message.Author, message.Text)
 		}
-	}()
+	}()*/
 
 	inputMessage := make(chan string)
 	go readInput(inputMessage)
@@ -147,7 +179,7 @@ func connectToRoom(user *auth.User) {
 		case <-done:
 			return
 		case message := <-inputMessage:
-			msg := entity.NewMessage(listOfRooms[pointOfMenu], user.Name, message)
+			msg := entity.NewMessage(room, user.Name, message)
 			err := c.WriteJSON(msg)
 			if err != nil {
 				log.Println("write:", err)
@@ -217,5 +249,4 @@ func createRoom(userToken string) *ResponseIdRoom {
 		return nil
 	}
 	return &room
-
 }

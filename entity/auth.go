@@ -1,9 +1,9 @@
 package entity
 
 type signUp struct {
-	Name     string `json:"name"`
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Name     string `json:"name" binding:"required"`
+	Email    string `json:"email" binding:"required"`
+	Password string `json:"password" binding:"required"`
 }
 
 func NewSignUp(input map[string]string) *signUp {
@@ -15,8 +15,8 @@ func NewSignUp(input map[string]string) *signUp {
 }
 
 type signIn struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Email    string `json:"email" binding:"required"`
+	Password string `json:"password" binding:"required"`
 }
 
 func NewSignIn(input map[string]string) *signIn {

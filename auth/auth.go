@@ -42,33 +42,6 @@ func inputData(commands []string) map[string]string {
 	return inputData
 }
 
-/*
-func authRequest(address string, requestBody []byte) []byte {
-	req, err := http.NewRequest(
-		http.MethodPost, address, bytes.NewBuffer(requestBody),
-	)
-	if err != nil {
-		log.Fatal(err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{
-		Timeout: time.Second * 2,
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer resp.Body.Close()
-	body, readErr := ioutil.ReadAll(resp.Body)
-	if readErr != nil {
-		log.Fatal(readErr)
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil
-	}
-	return body
-}*/
-
 type ResponseRegister struct {
 	Id uint `json:"id" binding:"required"`
 }
