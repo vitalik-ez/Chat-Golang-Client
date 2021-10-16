@@ -1,14 +1,30 @@
 package api
 
 import (
-	"bytes"
-	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"time"
 )
 
+const (
+	statusServerAddress = "http://localhost:8000/status-server"
+)
+
+func StatusServer() {
+	client := http.Client{
+		Timeout: 2 * time.Second,
+	}
+	resp, err := client.Get(statusServerAddress)
+	if err != nil {
+		log.Fatal("Server doesn't work. ", err.Error())
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		log.Fatal("Status code isn't correct.")
+	}
+}
+
+/*
 func clientHttpRequest(request *http.Request) []byte {
 	client := &http.Client{
 		Timeout: time.Second * 2,
@@ -22,7 +38,6 @@ func clientHttpRequest(request *http.Request) []byte {
 	if readErr != nil {
 		log.Fatal(readErr)
 	}
-	fmt.Println(body, resp.StatusCode)
 	if resp.StatusCode != http.StatusOK {
 		return nil
 	}
@@ -36,22 +51,6 @@ func GetRequest(address string, token ...string) []byte {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if len(token) > 0 {
-		req.Header.Add("Authorization", token[0])
-	}
 	return clientHttpRequest(req)
 }
-
-func PostRequest(address string, requestBody []byte, token ...string) []byte {
-	req, err := http.NewRequest(
-		http.MethodPost, address, bytes.NewBuffer(requestBody),
-	)
-	if err != nil {
-		log.Fatal(err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if len(token) > 0 {
-		req.Header.Add("Authorization", token[0])
-	}
-	return clientHttpRequest(req)
-}
+*/

@@ -2,34 +2,23 @@ package main
 
 import (
 	"log"
-	"net/http"
-	"time"
+	"os"
 
-	"github.com/vitalik-ez/Chat-Golang-Client/auth"
+	"github.com/joho/godotenv"
+	"github.com/vitalik-ez/Chat-Golang-Client/api"
 	"github.com/vitalik-ez/Chat-Golang-Client/room"
 )
 
-const (
-	statusServerAddress = "http://localhost:8000/status-server"
-)
-
-func statusServer() {
-	client := http.Client{
-		Timeout: 2 * time.Second,
+func initConfig() string {
+	if err := godotenv.Load(); err != nil {
+		log.Fatal("No .env file found")
 	}
-	resp, err := client.Get(statusServerAddress)
-	if err != nil {
-		log.Fatal("Server doesn't work. ", err.Error())
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		log.Fatal("Status code isn't correct.")
-	}
+	return os.Getenv("SERVER_BASE_PATH")
 }
 
 func main() {
-	statusServer()
-	user := auth.Menu()
-	room.RoomMenu(user)
+	api.StatusServer()
+	serverBasePath := initConfig()
+	room.Menu(serverBasePath)
 
 }
