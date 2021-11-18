@@ -47,7 +47,7 @@ func inputData() string {
 		scanner.Scan()
 		text := scanner.Text()
 		if len(text) == 0 {
-			fmt.Println("Enter name of room !!!")
+			fmt.Println("Enter name of room!")
 			continue
 		}
 		return text
