@@ -27,15 +27,20 @@ const (
 	joinRoomAddress string = "api/room/ws/"
 )
 
+func httpToWS(serverBasePath string) string {
+	return "ws" + serverBasePath[len("http"):]
+}
+
 func Menu(serverBasePath string) {
 
+	serverBasePath = httpToWS(serverBasePath)
 	client := NewClient(serverBasePath)
 
 	fmt.Println("Enter your name:")
 	client.Name = inputData()
 
 	for {
-		fmt.Println("Enter name of room:")
+		fmt.Print("Enter name of room: ")
 		room := inputData()
 		client.connectToRoom(room)
 	}
@@ -47,7 +52,7 @@ func inputData() string {
 		scanner.Scan()
 		text := scanner.Text()
 		if len(text) == 0 {
-			fmt.Println("Enter name of room!")
+			fmt.Println("Enter the required information!")
 			continue
 		}
 		return text

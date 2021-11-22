@@ -17,8 +17,8 @@ func initConfig() string {
 }
 
 func main() {
-	api.StatusServer()
 	serverBasePath := initConfig()
+	api.StatusServer(serverBasePath)
 	room.Menu(serverBasePath)
 
 }
