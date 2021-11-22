@@ -10,7 +10,7 @@ func CheckServerStatus(serverBasePath string) {
 	client := http.Client{
 		Timeout: 2 * time.Second,
 	}
-	resp, err := client.Get(serverBasePath)
+	resp, err := client.Get(serverBasePath + "status-server")
 	if err != nil {
 		log.Fatal("Server doesn't work. ", err.Error())
 	}
